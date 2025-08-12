@@ -7,8 +7,13 @@
             </div>
         </div>
 
+        <div v-if="loading" class="flex flex-col items-center justify-center py-12 mb-6">
+            <ProgressSpinner style="width: 50px; height: 50px" strokeWidth="4" />
+            <p class="text-surface-600 dark:text-surface-400 mt-4 text-sm">Loading deposit data...</p>
+        </div>
+
         <!-- Deposit History Table -->
-        <DataTable :value="deposits" :paginator="true" :rows="10" dataKey="id" :rowHover="true" v-model:filters="filters" :loading="loading" :globalFilterFields="['transaction_id', 'payment_method', 'status', 'amount']">
+        <DataTable v-else :value="deposits" :paginator="true" :rows="10" dataKey="id" :rowHover="true" v-model:filters="filters" :globalFilterFields="['transaction_id', 'payment_method', 'status', 'amount']">
             <template #header>
                 <div class="flex justify-between mb-2">
                     <IconField>
@@ -20,8 +25,11 @@
                     <Button label="New Deposit" icon="pi pi-plus" @click="openDepositDialog" class="px-6 py-2" />
                 </div>
             </template>
-            <template #empty> No deposits found. </template>
-            <template #loading> Loading deposit data. Please wait. </template>
+            <template #empty>
+                <div class="flex justify-center">
+                    <p>No deposits found.</p>
+                </div>
+            </template>
 
             <Column field="transaction_id" header="Transaction ID" style="min-width: 14rem">
                 <template #body="{ data }">
@@ -32,35 +40,26 @@
             <Column field="amount" header="Amount" dataType="numeric" style="min-width: 10rem">
                 <template #body="{ data }">
                     <span class="font-semibold">${{ data.amount }}</span>
-                </template>
-            </Column>
-
-            <Column field="payment_method" header="Payment Method" style="min-width: 12rem">
-                <template #body="{ data }">
-                    <div class="flex items-center gap-2">
-                        <i
-                            class="pi"
-                            :class="{
-                                'pi-university': data.payment_method.includes('Bank') || data.payment_method.includes('Wire'),
-                                'pi-credit-card': data.payment_method.includes('Credit Card'),
-                                'pi-paypal': data.payment_method.includes('PayPal'),
-                                'pi-bitcoin': data.payment_method.includes('Crypto')
-                            }"
-                        ></i>
-                        <span>{{ data.payment_method }}</span>
-                    </div>
+                    <small class="block font-bold" :class="{ 'text-primary': data.payment_method == 1, 'text-red-400': data.payment_method == 2, 'text-blue-600': data.payment_method == 3 }">
+                        {{ data.payment_method == 1 ? 'Bank' : data.payment_method == 2 ? 'Mobile Money' : data.payment_method == 3 ? 'Crypto' : '' }}
+                    </small>
                 </template>
             </Column>
 
             <Column field="status" header="Status" style="min-width: 10rem">
                 <template #body="{ data }">
-                    <Tag :value="data.status" severity="success" :icon="data.status === 'approved' ? 'pi pi-check' : data.status === 'rejected' ? 'pi pi-times' : 'pi pi-clock'" />
+                    <Tag
+                        :value="data.status == 1 ? 'Pending' : data.status == 2 ? 'Approved' : 'Rejected'"
+                        :severity="data.status === 1 ? 'warning' : data.status === 2 ? 'success' : 'danger'"
+                        :icon="data.status === 1 ? 'pi pi-clock' : data.status === 2 ? 'pi pi-check' : 'pi pi-times'"
+                    />
                 </template>
             </Column>
 
-            <Column field="created_at" header="Date" dataType="date" style="min-width: 10rem">
+            <Column field="added_by" header="Added By" dataType="date" style="min-width: 10rem">
                 <template #body="{ data }">
-                    {{ data.created_at }}
+                    {{ data.added_by }}
+                    <small class="block text-primary font-bold">{{ data.created_at }}</small>
                 </template>
             </Column>
 
@@ -144,9 +143,9 @@
 
 <script setup>
 import { FilterMatchMode, FilterOperator } from '@primevue/core/api';
+import axios from 'axios';
 import { useToast } from 'primevue/usetoast';
 import { onBeforeMount, ref } from 'vue';
-
 const toast = useToast();
 
 // Dialog state
@@ -159,81 +158,32 @@ const depositForm = ref({
     payment_method: null
 });
 
-// Payment methods
-const paymentMethods = ref([
-    { label: 'Bank Transfer', value: 'bank_transfer' },
-    { label: 'Credit Card', value: 'credit_card' },
-    { label: 'PayPal', value: 'paypal' },
-    { label: 'Crypto', value: 'crypto' },
-    { label: 'Wire Transfer', value: 'wire_transfer' }
-]);
-
-// Deposit history data
+const paymentMethods = ref([]);
 const deposits = ref([]);
 const loading = ref(false);
 const filters = ref(null);
-
-// Sample deposit data (replace with actual API call)
-const sampleDeposits = [
-    {
-        id: 1,
-        transaction_id: 'TXN001234567',
-        amount: 1500.0,
-        payment_method: 'Bank Transfer',
-        status: 'approved',
-        date: new Date('2025-08-08'),
-        created_at: new Date('2025-08-08T10:30:00')
-    },
-    {
-        id: 2,
-        transaction_id: 'TXN001234568',
-        amount: 750.5,
-        payment_method: 'Credit Card',
-        status: 'pending',
-        date: new Date('2025-08-09'),
-        created_at: new Date('2025-08-09T14:15:00')
-    },
-    {
-        id: 3,
-        transaction_id: 'TXN001234569',
-        amount: 2000.0,
-        payment_method: 'Crypto',
-        status: 'rejected',
-        date: new Date('2025-08-07'),
-        created_at: new Date('2025-08-07T16:45:00')
-    },
-    {
-        id: 4,
-        transaction_id: 'TXN001234570',
-        amount: 500.0,
-        payment_method: 'PayPal',
-        status: 'approved',
-        date: new Date('2025-08-06'),
-        created_at: new Date('2025-08-06T09:20:00')
-    },
-    {
-        id: 5,
-        transaction_id: 'TXN001234571',
-        amount: 3000.0,
-        payment_method: 'Wire Transfer',
-        status: 'pending',
-        date: new Date('2025-08-05'),
-        created_at: new Date('2025-08-05T11:30:00')
-    }
-];
 
 onBeforeMount(() => {
     loadDeposits();
     initFilters();
 });
 
-function loadDeposits() {
+async function loadDeposits() {
     loading.value = true;
     // Simulate API call
-    setTimeout(() => {
-        deposits.value = sampleDeposits;
+    const response = await axios.get('/deposits');
+    if (response.status === 200) {
+        deposits.value = response.data.deposits;
         loading.value = false;
-    }, 1000);
+    } else {
+        toast.add({
+            severity: 'error',
+            summary: 'Error Loading Deposits',
+            detail: 'Failed to load deposit data',
+            life: 3000
+        });
+        loading.value = false;
+    }
 }
 
 function initFilters() {
